@@ -34,7 +34,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-formatter = colorlog.ColoredFormatter('%(asctime)s - %(name)s:%(lineno)d - %(log_color)s%(levelname)s - %(message)s')
+formatter = colorlog.ColoredFormatter(
+    '%(asctime)s - %(name)s:%(lineno)d - %(log_color)s%(levelname)s - %(message)s'
+)
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
@@ -43,8 +45,8 @@ log_file = os.path.join(os.getcwd(), LOG_FILE)
 fh = logging.FileHandler(log_file)
 fh.setLevel(logging.DEBUG)
 fh.setFormatter(formatter)
-#f = ContextFilter()
-#fh.addFilter(f)
+# f = ContextFilter()
+# fh.addFilter(f)
 logger.addHandler(fh)
 
 # Set specific log levels for certain loggers
@@ -52,7 +54,6 @@ for customlog in CUSTOM_LOG_LEVEL:
     logging.getLogger(customlog[0]).setLevel(customlog[1])
 
 logger.info('logger initialized')
-
 
 
 # Open an image, massage, store in temp file and run OCR #
@@ -88,12 +89,12 @@ def process_image(filename, thresh):
     logger.debug('opening temporary file')
     img = Image.open(temp_file)
 
-    #text = tool.image_to_string(img, lang=lang, builder=pyocr.builders.TextBuilder())
+    # text = tool.image_to_string(img, lang=lang, builder=pyocr.builders.TextBuilder())
     text = pyocr.tesseract.image_to_string(img, lang='eng', builder=pyocr.builders.TextBuilder())
     logger.info('TextBuilder output: %s', text)
 
-    #digits = tool.image_to_string(img, lang=lang, builder=pyocr.builders.DigitBuilder())
-    #logger.info('DigitBuilder: %s' % digits)
+    # digits = tool.image_to_string(img, lang=lang, builder=pyocr.builders.DigitBuilder())
+    # logger.info('DigitBuilder: %s' % digits)
 
     # We're lazy and don't bother handling clean-up failures of these for now
     os.remove(temp_file)
@@ -123,14 +124,14 @@ def main(args):
     failed_path = os.path.join(os.getcwd(), PROCESS_FAIL_PATH)
 
     # The tools are returned in the recommended order of usage
-    #tools = pyocr.get_available_tools()
-    #tool = tools[0]
+    # tools = pyocr.get_available_tools()
+    # tool = tools[0]
     tool = pyocr.tesseract
     logger.info('using tool \'%s\'' % tool.get_name())
 
     langs = tool.get_available_languages()
     logger.info('available languages: %s' % ', '.join(langs))
-    if not 'eng' in langs:
+    if 'eng' not in langs:
         logger.fatal('\'eng\' not in available languages, aborting')
         sys.exit(0)
 
@@ -161,8 +162,9 @@ def main(args):
         while retry <= len(THRESH_ADJ):
 
             # Calculate current threshold for cv2
-            thresh = args['threshold'] + THRESH_ADJ[retry-1]
-            if thresh > 250: thresh = 250
+            thresh = args['threshold'] + THRESH_ADJ[retry - 1]
+            if thresh > 250:
+                thresh = 250
 
             # Do it
             logger.info('processing \'%s\' [%d/%d]', fn, idx, len(image_files))
@@ -212,17 +214,18 @@ def main(args):
             # Saved processed images
             # TODO: Record OCR'd text with each failed attempt, maybe render on image itself?
             for i in range(len(THRESH_ADJ)):
-                mono_img_fn = os.path.join(failed_path, '%s_mono-%d.png' % (cur_fn_base_noext, i+1))
-                logger.debug('writing failed image %s', mono_img_fn)
+                mono_img_fn = '%s_mono-%d.png' % (cur_fn_base_noext, i + 1)
+                mono_img_path = os.path.join(failed_path, mono_img_fn)
+                logger.debug('writing failed image %s', mono_img_path)
                 cv2.imwrite(mono_img_fn, mono_img[i])
 
-            #cv2.imshow('Image', cropped_image)
-            #cv2.imshow('Output', mono_image)
+            # cv2.imshow('Image', cropped_image)
+            # cv2.imshow('Output', mono_image)
 
-            #import pdb
-            #pdb.set_trace()
+            # import pdb
+            # pdb.set_trace()
 
-            #cv2.waitKey(0)
+            # cv2.waitKey(0)
             sys.exit(0)
 
         logger.info('detected coordinates:')
@@ -248,4 +251,3 @@ if __name__ == '__main__':
 
     # main #
     main(args)
-
