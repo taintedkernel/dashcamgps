@@ -2,30 +2,43 @@ from PIL import Image
 import pyocr
 import cv2
 
-import argparse
+import colorlog
 import logging
+
+import argparse
 import shutil
 import sys
 import re
 import os
 
 
-#THRESH_ADJ = [0, -24, 24, -48, 48]
+# Globals #
 THRESH_ADJ = [0, -24, 24, -48]
 LOG_FILE = 'garmin2ocr.log'
 PROCESS_FAIL_PATH = 'failed_images'
 
 
-# Configure logging
-# using __name__ prevents logs in other files from displaying
+### Configure logging ###
+# Filter for our logger
+class ContextFilter(logging.Filter):
+    def filter(self, record):
+        if 'metasync' in record.name:
+            return True
+        return False
+
+
+CUSTOM_LOG_LEVEL = [('PIL.PngImagePlugin', logging.INFO)]
+
+# Use colored logger for console
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = colorlog.ColoredFormatter('%(asctime)s - %(name)s:%(lineno)d - %(log_color)s%(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+# Configure file logging
 log_file = os.path.join(os.getcwd(), LOG_FILE)
 fh = logging.FileHandler(log_file)
 fh.setLevel(logging.DEBUG)
@@ -33,6 +46,10 @@ fh.setFormatter(formatter)
 #f = ContextFilter()
 #fh.addFilter(f)
 logger.addHandler(fh)
+
+# Set specific log levels for certain loggers
+for customlog in CUSTOM_LOG_LEVEL:
+    logging.getLogger(customlog[0]).setLevel(customlog[1])
 
 logger.info('logger initialized')
 
@@ -193,6 +210,7 @@ def main(args):
             shutil.copyfile(fn, copy_failed_fn)
 
             # Saved processed images
+            # TODO: Record OCR'd text with each failed attempt, maybe render on image itself?
             for i in range(len(THRESH_ADJ)):
                 mono_img_fn = os.path.join(failed_path, '%s_mono-%d.png' % (cur_fn_base_noext, i+1))
                 logger.debug('writing failed image %s', mono_img_fn)
