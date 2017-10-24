@@ -81,8 +81,12 @@ def filter_file(filename, prefix):
     return True
 
 
-def maketrans(src, replace):
-    return {src[x]: replace[x] for x in range(len(src))}
+def translate(text, src, replace):
+    tbl = dict(zip(src, replace))
+    for i, c in enumerate(text):
+        if c in src:
+            text = text.replace(c, tbl[c])
+    return text
 
 
 def main(args):
@@ -127,14 +131,7 @@ def main(args):
             logger.debug('attempt %d', retry)
             text = process_image(fn, thresh)
 
-            tbl = maketrans('SlO', '510')
-            #fix_text = text.decode('utf-8').translate(tbl)
-            #fix_text = str(text).translate(tbl)
-            #try:
-            fix_text = text.translate(tbl)
-            #except:
-            #    import pdb
-            #    pdb.set_trace()
+            fix_text = translate(text, 'SlO', '510')
             logger.debug('corrected text: \'%s\'', fix_text)
             gps_text = gps_rep.match(fix_text)
 
