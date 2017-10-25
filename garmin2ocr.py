@@ -1,9 +1,17 @@
-from PIL import Image
-import pyocr
-import cv2
+# pylint: disable=no-member
+# pylint is not detecting cv2 opencv library members #
+"""
+This tool performs OCR on images gathered from a dashcam with
+GPS data overlaid, determines the coordinates and embed with
+the exif metadata
 
-import colorlog
-import logging
+It will analyze additional photo collections taken during an overlapping
+time period, perform grouping where applicable and edit exif capture
+time with timezone adjustment
+
+Further ideas may include interpolation of GPS coordinates for non-tagged
+photos if local grouping is sufficiently effective
+"""
 
 import argparse
 import shutil
@@ -11,16 +19,34 @@ import sys
 import re
 import os
 
+import logging
+import colorlog
 
-# Globals #
+from PIL import Image
+import pyocr
+import cv2
+
+
+### Globals ###
+# Threshold adjustment values to try (first is default)
+DEFAULT_THRESH = 224
 THRESH_ADJ = [0, -24, 24, -48]
+
+# Log filename
 LOG_FILE = 'garmin2ocr.log'
+
+# Location to save failed processing attempts
 PROCESS_FAIL_PATH = 'failed_images'
+
+# RegEx to match our dashcam GPS coordinates
+GPS_RE = r'GARMIN.*\s(?P<lat>[0-9\-]{1,4}\.[0-9]{4,5})\s?(?P<long>[0-9-]{1,4}\.[0-9]{4,5}).*'
 
 
 ### Configure logging ###
 # Filter for our logger
+# pylint: disable=too-few-public-methods
 class ContextFilter(logging.Filter):
+    """ Custom filter based on record.name """
     def filter(self, record):
         if 'metasync' in record.name:
             return True
@@ -32,22 +58,22 @@ CUSTOM_LOG_LEVEL = [('PIL.PngImagePlugin', logging.INFO)]
 # Use colored logger for console
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
+stream_h = logging.StreamHandler()
+stream_h.setLevel(logging.DEBUG)
 formatter = colorlog.ColoredFormatter(
     '%(asctime)s - %(name)s:%(lineno)d - %(log_color)s%(levelname)s - %(message)s'
 )
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+stream_h.setFormatter(formatter)
+logger.addHandler(stream_h)
 
 # Configure file logging
 log_file = os.path.join(os.getcwd(), LOG_FILE)
-fh = logging.FileHandler(log_file)
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
+file_h = logging.FileHandler(log_file)
+file_h.setLevel(logging.DEBUG)
+file_h.setFormatter(formatter)
 # f = ContextFilter()
-# fh.addFilter(f)
-logger.addHandler(fh)
+# file_h.addFilter(f)
+logger.addHandler(file_h)
 
 # Set specific log levels for certain loggers
 for customlog in CUSTOM_LOG_LEVEL:
@@ -56,8 +82,8 @@ for customlog in CUSTOM_LOG_LEVEL:
 logger.info('logger initialized')
 
 
-# Open an image, massage, store in temp file and run OCR #
 def process_image(filename, thresh):
+    """ Open an image, massage, store in temp file and run OCR """
 
     logger.info('reading image \'%s\' (threshold %d)', filename, thresh)
     image = cv2.imread(filename)
@@ -101,8 +127,8 @@ def process_image(filename, thresh):
     return (text, mono_image)
 
 
-# Filter input files #
 def filter_file(filename, prefix):
+    """ Filter input files """
     if prefix and prefix not in filename:
         return False
     if '.JPG' not in filename.upper():
@@ -112,47 +138,29 @@ def filter_file(filename, prefix):
 
 
 def translate(text, src, replace):
+    """ Quick hack to search & replace chars, very ugly """
+
     tbl = dict(zip(src, replace))
-    for i, c in enumerate(text):
-        if c in src:
-            text = text.replace(c, tbl[c])
+    for char in text:
+        if char in src:
+            text = text.replace(char, tbl[char])
     return text
 
 
-def main(args):
-    # On error, copy images to separate directory for later analysis
+# pylint: disable=too-many-locals
+def process_files(args, image_files):
+    """ Iterate through list of files and process """
+
+    # Init #
+    gps_rep = re.compile(GPS_RE)
     failed_path = os.path.join(os.getcwd(), PROCESS_FAIL_PATH)
 
-    # The tools are returned in the recommended order of usage
-    # tools = pyocr.get_available_tools()
-    # tool = tools[0]
-    tool = pyocr.tesseract
-    logger.info('using tool \'%s\'' % tool.get_name())
-
-    langs = tool.get_available_languages()
-    logger.info('available languages: %s' % ', '.join(langs))
-    if 'eng' not in langs:
-        logger.fatal('\'eng\' not in available languages, aborting')
-        sys.exit(0)
-
-    gps_re = r'GARMIN.*\s(?P<lat>[0-9\-]{1,4}\.[0-9]{4,5})\s?(?P<long>[0-9-]{1,4}\.[0-9]{4,5}).*'
-    gps_rep = re.compile(gps_re)
-
-    # Build queue of files to process
-    if os.path.isfile(args['path']):
-        image_files = [args['path']]
-    elif os.path.isdir(args['path']):
-        image_files = map(lambda x: os.path.join(args['path'], x), os.listdir(args['path']))
-    else:
-        logger.fatal('unable to determine if path \'%s\' is file or directory, aborting')
-        sys.exit(0)
-
     # Iterate sequentially over files
-    for idx, fn in enumerate(sorted(image_files)):
+    for idx, fname in enumerate(sorted(image_files)):
 
         # Filter on filename
-        if not filter_file(fn, args['filter']):
-            logger.debug('skipping %s [%d/%d]', fn, idx, len(image_files))
+        if not filter_file(fname, args['filter']):
+            logger.debug('skipping %s [%d/%d]', fname, idx, len(image_files))
             continue
 
         # Upon regex match failure, retry
@@ -167,10 +175,10 @@ def main(args):
                 thresh = 250
 
             # Do it
-            logger.info('processing \'%s\' [%d/%d]', fn, idx, len(image_files))
+            logger.info('processing \'%s\' [%d/%d]', fname, idx, len(image_files))
             logger.debug('threshold %d', thresh)
             logger.debug('attempt %d', retry)
-            (text, m_img) = process_image(fn, thresh)
+            (text, m_img) = process_image(fname, thresh)
             mono_img.append(m_img)
 
             # Handle common translation errors
@@ -196,11 +204,11 @@ def main(args):
             # Copy failed source file and processed versions
             # to separate path for later error analysis
             #
-            # eg: fn = '/foo/bar/image001.jpg'
+            # eg: fname = '/foo/bar/image001.jpg'
             # cur_fn_base = 'image001.jpg'
             # cur_fn_base_noext = 'image001'
             # copy_failed_fn = 'failed_image/image001.jpg'
-            cur_fn_base = os.path.basename(fn)
+            cur_fn_base = os.path.basename(fname)
             cur_fn_base_noext = cur_fn_base.split(os.path.extsep)[0]
             copy_failed_fn = os.path.join(failed_path, cur_fn_base)
 
@@ -209,7 +217,7 @@ def main(args):
                 os.mkdir(failed_path)
 
             logger.debug('copying failed file to \'%s\'', copy_failed_fn)
-            shutil.copyfile(fn, copy_failed_fn)
+            shutil.copyfile(fname, copy_failed_fn)
 
             # Saved processed images
             # TODO: Record OCR'd text with each failed attempt, maybe render on image itself?
@@ -236,18 +244,45 @@ def main(args):
         # write gps data to exif
 
 
+def main(args):
+    """ main() """
+
+    # The tools are returned in the recommended order of usage
+    # tools = pyocr.get_available_tools()
+    # tool = tools[0]
+    tool = pyocr.tesseract
+    logger.info('using tool \'%s\'', tool.get_name())
+
+    langs = tool.get_available_languages()
+    logger.info('available languages: %s', ', '.join(langs))
+    if 'eng' not in langs:
+        logger.fatal('\'eng\' not in available languages, aborting')
+        sys.exit(0)
+
+    # Build queue of files to process
+    if os.path.isfile(args['path']):
+        image_files = [args['path']]
+    elif os.path.isdir(args['path']):
+        image_files = map(lambda x: os.path.join(args['path'], x), os.listdir(args['path']))
+    else:
+        logger.fatal('unable to determine if path \'%s\' is file or directory, aborting')
+        sys.exit(0)
+
+    process_files(args, image_files)
+
+
 # void main(args) #
 if __name__ == '__main__':
 
     # Handle args
-    ap = argparse.ArgumentParser()
-    ap.add_argument('-p', '--path', type=str, required=True,
-                    help='path to image or directory containing images')
-    ap.add_argument('-f', '--filter', type=str,
-                    help='prefix for images to be selected/filtered for processing')
-    ap.add_argument('-t', '--threshold', type=int, default=224,
-                    help='threshold value for image filtering')
-    args = vars(ap.parse_args())
+    argp = argparse.ArgumentParser()
+    argp.add_argument('-p', '--path', type=str, required=True,
+                      help='path to image or directory containing images')
+    argp.add_argument('-f', '--filter', type=str,
+                      help='prefix for images to be selected/filtered for processing')
+    argp.add_argument('-t', '--threshold', type=int, default=DEFAULT_THRESH,
+                      help='threshold value for image filtering')
+    arguments = vars(argp.parse_args())
 
     # main #
-    main(args)
+    main(arguments)
