@@ -45,12 +45,12 @@ GPS_RE = r'GARMIN.*\s(?P<lat>[0-9\-]{1,4}\.[0-9]{4,5})\s?(?P<long>[0-9-]{1,4}\.[
 ### Configure logging ###
 # Filter for our logger
 # pylint: disable=too-few-public-methods
-class ContextFilter(logging.Filter):
-    """ Custom filter based on record.name """
-    def filter(self, record):
-        if 'metasync' in record.name:
-            return True
-        return False
+#class ContextFilter(logging.Filter):
+#    """ Custom filter based on record.name """
+#    def filter(self, record):
+#        if 'metasync' in record.name:
+#            return True
+#        return False
 
 
 CUSTOM_LOG_LEVEL = [('PIL.PngImagePlugin', logging.INFO)]
