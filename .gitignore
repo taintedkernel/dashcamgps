@@ -1,4 +1,5 @@
 venv/
+images/*
 *.pyc
 *.swp
 *.swo
