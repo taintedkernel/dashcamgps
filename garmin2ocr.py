@@ -195,13 +195,27 @@ def show_exif(fname):
 
 
 # pylint: disable=too-many-locals
-def process_files(args, image_files):
+def process_files(args, path):
     """ Iterate through list of files and process """
 
     # Init #
     gps_rep = re.compile(GPS_RE)
     gps_trep = tre.compile(GPS_TRE, tre.EXTENDED)
     fz = tre.Fuzzyness(maxerr = 3)
+
+    # Build queue of files to process
+    if os.path.isfile(path):
+        base_path = os.path.dirname(path)
+        image_files = [path]
+    elif os.path.isdir(path):
+        base_path = path
+        image_files = map(lambda x: os.path.join(path, x), os.listdir(path))
+    else:
+        logger.fatal('unable to determine if path \'%s\' is file or directory, aborting')
+        sys.exit(0)
+
+    logger.debug('invoked with path: %s', path)
+    logger.debug('calculated base path: %s', base_path)
     output_data = open('garmin2ocr.out', 'w')
 
     # Create first track in our GPX:
@@ -213,12 +227,12 @@ def process_files(args, image_files):
     gpx_segment = gpxpy.gpx.GPXTrackSegment()
     gpx_track.segments.append(gpx_segment)
 
-    succeed_path = os.path.join(os.getcwd(), IMG_SUCCEED_PATH)
+    succeed_path = os.path.join(base_path, IMG_SUCCEED_PATH)
     if not os.path.isdir(succeed_path):
         logger.debug('creating path \'%s\'', succeed_path)
         os.mkdir(succeed_path)
 
-    failed_path = os.path.join(os.getcwd(), IMG_FAILED_PATH)
+    failed_path = os.path.join(base_path, IMG_FAILED_PATH)
     if not os.path.isdir(failed_path):
         logger.debug('creating path \'%s\'', failed_path)
         os.mkdir(failed_path)
@@ -359,15 +373,15 @@ def process_files(args, image_files):
         zeroith_ifd = current_exif['0th']
         exif_ifd = current_exif['Exif']
 
-        o = io.BytesIO()
-        thumb_im = Image.open(fname)
-        thumb_im.thumbnail((50, 50), Image.ANTIALIAS)
-        thumb_im.save(o, "jpeg")
-        thumbnail = o.getvalue()
+        #o = io.BytesIO()
+        #thumb_im = Image.open(fname)
+        #thumb_im.thumbnail((50, 50), Image.ANTIALIAS)
+        #thumb_im.save(o, "jpeg")
+        #thumbnail = o.getvalue()
 
         zeroith_ifd[piexif.ImageIFD.Software] = u"piexif"
-        zeroith_ifd[piexif.ImageIFD.XResolution] = (72, 1)
-        zeroith_ifd[piexif.ImageIFD.YResolution] = (72, 1)
+        #zeroith_ifd[piexif.ImageIFD.XResolution] = (72, 1)
+        #zeroith_ifd[piexif.ImageIFD.YResolution] = (72, 1)
         zeroith_ifd[piexif.ImageIFD.DateTime] = datetime.strftime(image_ts, EXIF_DATETIME_FMT)
         zeroith_ifd[piexif.ImageIFD.ImageDescription] = ""
 
@@ -394,19 +408,20 @@ def process_files(args, image_files):
             #piexif.GPSIFD.GPSDateStamp: timestamp
         }
 
-        first_ifd = {
-            piexif.ImageIFD.Make: u"Garmin",
-            piexif.ImageIFD.XResolution: (40, 1),
-            piexif.ImageIFD.YResolution: (40, 1),
-            piexif.ImageIFD.Compression: 6,
-            piexif.ImageIFD.Software: u"piexif",
-            piexif.ImageIFD.ImageDescription: "",
-            piexif.ImageIFD.UniqueCameraModel: zeroith_ifd[piexif.ImageIFD.Model],
-            piexif.ImageIFD.DateTime: datetime.strftime(image_ts, '%Y-%m-%d %H:%M:%S')
-        }
+        #first_ifd = {
+        #    piexif.ImageIFD.Make: u"Garmin",
+        #    piexif.ImageIFD.XResolution: (40, 1),
+        #    piexif.ImageIFD.YResolution: (40, 1),
+        #    piexif.ImageIFD.Compression: 6,
+        #    piexif.ImageIFD.Software: u"piexif",
+        #    piexif.ImageIFD.ImageDescription: "",
+        #    piexif.ImageIFD.UniqueCameraModel: zeroith_ifd[piexif.ImageIFD.Model],
+        #    piexif.ImageIFD.DateTime: datetime.strftime(image_ts, '%Y-%m-%d %H:%M:%S')
+        #}
 
         # Compile EXIF and write to file
-        exif_dict = {"0th": zeroith_ifd, "Exif": exif_ifd, "GPS": gps_ifd, "1st": first_ifd, "thumbnail": thumbnail}
+        #exif_dict = {"0th": zeroith_ifd, "Exif": exif_ifd, "GPS": gps_ifd, "1st": first_ifd, "thumbnail": thumbnail}
+        exif_dict = {"0th": zeroith_ifd, "Exif": exif_ifd, "GPS": gps_ifd}
         exif_bytes = piexif.dump(exif_dict)
         piexif.insert(exif_bytes, succeed_fn)
 
@@ -430,16 +445,8 @@ def main(args):
         logger.fatal('\'eng\' not in available languages, aborting')
         sys.exit(0)
 
-    # Build queue of files to process
-    if os.path.isfile(args['path']):
-        image_files = [args['path']]
-    elif os.path.isdir(args['path']):
-        image_files = map(lambda x: os.path.join(args['path'], x), os.listdir(args['path']))
-    else:
-        logger.fatal('unable to determine if path \'%s\' is file or directory, aborting')
-        sys.exit(0)
-
-    process_files(args, image_files)
+    #process_files(args, image_files)
+    process_files(args, args['path'])
 
 
 # void main(args) #
