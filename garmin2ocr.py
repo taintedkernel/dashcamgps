@@ -44,7 +44,7 @@ import tre
 DEFAULT_THRESH = 224
 THRESH_ADJ = [0, -24, 24, -48]
 
-LOG_FILE = 'garmin2ocr.log'
+LOG_FILE = 'garmin2ocr-%s.log'
 GPX_OUT = 'dashcam.gpx'
 
 EXIF_DATETIME_FMT = '%Y:%m:%d %H:%M:%S'
@@ -85,7 +85,8 @@ logger.addHandler(stream_h)
 
 # Configure file logging
 # TODO: Add single log per invocation
-log_file = os.path.join(os.getcwd(), LOG_FILE)
+log_fn_fmt = LOG_FILE % datetime.now().replace(microsecond=0).isoformat()
+log_file = os.path.join(os.getcwd(), log_fn_fmt)
 file_h = logging.FileHandler(log_file)
 file_h.setLevel(logging.DEBUG)
 file_h.setFormatter(formatter)
@@ -267,9 +268,8 @@ def process_files(args, path):
                 thresh = 250
 
             # Do it
-            logger.info('processing \'%s\' [%d/%d]', fname, idx, len(image_files))
+            logger.info('processing \'%s\' [%d/%d] (attempt %d)', fname, idx, len(image_files)i, retry)
             logger.debug('threshold %d', thresh)
-            logger.debug('attempt %d', retry)
             (text, m_img) = process_image(fname, thresh, enhanced=True)
             mono_img.append(m_img)
 
@@ -281,27 +281,38 @@ def process_files(args, path):
             # Test against regex
             gps_text = gps_trep.search(fix_text, fz)
 
-            # This needs to be improved
+            # TODO: This needs to be improved
+            # The code is poor, but basically we fail if either
+            # date, time or GPS cannot be parsed correctly.
+            # We should accept partial successes and possibly
+            # allow user to manually set correct data via
+            # external file
             if gps_text:
                 (date_str, time_str, gps_lat_str, gps_long_str) = map(lambda x: gps_text[x], range(1,5))
                 if len(time_str) == 8:
                     time_str = '%s:%s:%s' % (time_str[0:2], time_str[3:5], time_str[6:8])
                 else:
+                    logger.debug('invalid timestamp %s, aborting', time_str)
                     gps_text = None
 
                 try:
                     if abs(float(gps_lat_str)) > 90:
+                        logger.debug('invalid GPS latitude: %s, aborting', gps_lat_str)
                         gps_text = None
 
                     if abs(float(gps_long_str)) > 180:
+                        logger.debug('invalid GPS longitude: %s, aborting', gps_long_str)
                         gps_text = None
+
                 except:
+                    logger.debug('invalid GPS coordinates, aborting: (%s, %s)', gps_lat_str, gps_long_str)
                     gps_text = None
 
                 try:
                     image_ts = datetime.strptime('%s %s' % (date_str, time_str), '%m/%d/%Y %H:%M:%S')
                     logger.info('timestamp parsed: %s', image_ts)
                 except ValueError:
+                    logger.debug('unable to parse datetime %s %s, aborting', date_str, time_str)
                     gps_text = None
 
                 #logger.debug(gps_text.groups())
